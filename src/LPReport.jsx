@@ -1286,13 +1286,10 @@ export default function App(){
     {!user&&step>=4&&<SessionGate onConfirm={confirmUser}/>}
 
     {/* Top nav — navy background, white text, terracotta accent */}
-    <div style={{background:B.navy,padding:"0 28px",height:54,display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${B.navyLight}`}}>
+    <div style={{background:B.navy,padding:"0 28px",height:56,display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${B.navyLight}`}}>
       <div style={{display:"flex",alignItems:"center",gap:SP.md}}>
-        <img
-          src="https://res.cloudinary.com/dsgfts9gp/image/upload/Gemini_Generated_Image_uao02uao02uao02u-remove-bg-io_mb5sys"
-          alt="Logo"
-          style={{width:50,height:50,objectFit:"contain",flexShrink:0}}
-        />
+        <img src="https://res.cloudinary.com/dsgfts9gp/image/upload/Gemini_Generated_Image_uao02uao02uao02u-remove-bg-io_mb5sys.png" alt="TP" style={{width:50,height:50,objectFit:"contain",filter:"brightness(0) invert(1)"}}/>
+        <div style={{width:3,height:22,background:B.terracotta,borderRadius:2}}/>
         <span style={{color:B.white,fontSize:13,fontWeight:700,fontFamily:FF,letterSpacing:"0.04em"}}>LP Report Generator</span>
         {cfg.fundName&&<span style={{color:"#4A7ABF",fontSize:12,fontFamily:FF}}>/ {cfg.fundName}</span>}
       </div>
