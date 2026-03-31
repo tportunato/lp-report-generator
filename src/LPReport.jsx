@@ -729,182 +729,354 @@ function CsvUploadPanel({ asset, onApply, onClose }) {
   );
 }
 
-// ─── AI UPLOAD MODAL (per asset row) ─────────────────────────────────────────
-const AI_DEMO_DELAY = 1400; // ms simulated processing time
+// ─── AI UPLOAD MODAL — multi-file, per-file destination tagging ──────────────
+const AI_DEMO_DELAY = 1400;
+
+const AI_DESTINATIONS = [
+  { id:"assets",  label:"Assets",             desc:"Valuations, GLA, occupancy, WALB, tenants" },
+  { id:"debt",    label:"Debt",               desc:"Lender, LTV, margin, maturity, covenants"  },
+  { id:"updates", label:"Asset Updates",      desc:"Analyst notes, event tags"                 },
+  { id:"market",  label:"Market Context",     desc:"Yields, vacancy, rental growth by geo"     },
+  { id:"fin",     label:"Financials",         desc:"NAV bridge, income, fees, distributions"   },
+];
+
+// Demo mapping results keyed by destination
+function demoResultForDest(dest, assetName) {
+  const R = {
+    assets:  { mapped:{name:assetName,country:"France",type:"Logistics",fairValue:"31.2",occupancy:"97",walb:"5.2"}, missing:["area","bookValue","tenants"], unmapped:["MSCI Code","Valuation Date"] },
+    debt:    { mapped:{lender:"Société Générale",outstanding:"16.2",ltv:"52",margin:"180",maturity:"2027-06"}, missing:["covenantLtv","covenantDscr","hedged"], unmapped:["Facility ID","Draw Date"] },
+    updates: { mapped:{analystNote:"Lease renewal in progress with DHL; expect 5yr extension Q1 2025."}, missing:[], unmapped:["Internal Ref","Review Date"] },
+    market:  { mapped:{geo:"France",primeYield:"4.25",vacancy:"2.1",rentalGrowth:"3.8"}, missing:["investActivity","occupierDemand"], unmapped:["Source","Publication Date"] },
+    fin:     { mapped:{priorNav:"58.2",valuationMovement:"2.4",incomeAccrued:"1.8"}, missing:["feesExpenses","distributions","otherMovements","liabilities"], unmapped:["Audit Ref"] },
+  };
+  return R[dest] || { mapped:{}, missing:[], unmapped:[] };
+}
 
 function AiUploadModal({ asset, onApply, onClose }) {
-  const fileRef  = useRef();
-  const [step,   setStep]   = useState("choose");   // choose | uploading | gaps | done
-  const [fmt,    setFmt]    = useState(null);        // "csv" | "pdf"
-  const [file,   setFile]   = useState(null);
-  const [result, setResult] = useState(null);        // { mapped, missing, unmapped }
-  const [inlineFlags, setInlineFlags] = useState({}); // col → true if flagged after confirm
+  const dropRef = useRef();
+  // files: [{ id, file, dests: Set, processing, result }]
+  const [files,   setFiles]   = useState([]);
+  const [step,    setStep]    = useState("stage"); // stage | processing | gaps
+  const [dragging,setDragging]= useState(false);
+  const [results, setResults] = useState([]); // processed results per file
 
-  const FIELD_LABELS = {name:"Asset Name",country:"Country",type:"Type",area:"GLA (sqm)",bookValue:"Book Value €m",fairValue:"Fair Value €m",occupancy:"Occupancy %",walb:"WALB (yrs)",tenants:"Tenants"};
+  const uid2 = () => Math.random().toString(36).slice(2,8);
 
-  const handleFile = (f, format) => {
-    setFile(f); setFmt(format); setStep("uploading");
-    const reader = new FileReader();
-    reader.onload = e => {
+  const addFiles = newFiles => {
+    const entries = Array.from(newFiles).map(f=>({
+      id: uid2(), file:f,
+      dests: new Set(["assets"]), // default destination
+      processing: false, result: null,
+    }));
+    setFiles(prev=>[...prev,...entries]);
+  };
+
+  const removeFile = id => setFiles(prev=>prev.filter(f=>f.id!==id));
+
+  const toggleDest = (fileId, destId) => {
+    setFiles(prev=>prev.map(f=>{
+      if(f.id!==fileId) return f;
+      const d = new Set(f.dests);
+      if(d.has(destId)) { if(d.size>1) d.delete(destId); } // must keep at least one
+      else d.add(destId);
+      return {...f, dests:d};
+    }));
+  };
+
+  const handleProcess = () => {
+    if(!files.length) return;
+    setStep("processing");
+    // Simulate staggered processing per file
+    let done = 0;
+    const results = [];
+    files.forEach((f, i) => {
       setTimeout(() => {
-        let rows = [];
-        try { rows = parseCSV(e.target.result); } catch(_) {}
-        const raw = rows[0] || {};
-        const res = aiMapRow(raw);
-
-        // Demo fallback: if file has no recognisable structure, use a plausible demo result
-        if (!rows.length || Object.keys(raw).length === 0) {
-          const demoMapped = { name: asset.name, country: asset.country, type: asset.type };
-          const demoMissing = ["area","bookValue","fairValue","occupancy","walb","tenants"];
-          res.mapped  = demoMapped;
-          res.missing = demoMissing;
-          res.unmapped = format === "pdf" ? ["Page header", "Footnotes", "Signature block"] : [];
+        const fileResults = Array.from(f.dests).map(dest=>({
+          dest,
+          ...demoResultForDest(dest, asset.name||"Asset"),
+        }));
+        results.push({ fileId:f.id, fileName:f.file.name, fileResults });
+        done++;
+        if(done === files.length) {
+          setResults(results);
+          setStep("gaps");
         }
-        setResult(res);
-        setStep("gaps");
-      }, AI_DEMO_DELAY);
-    };
-    reader.readAsText(f);
+      }, AI_DEMO_DELAY * (i * 0.6 + 1));
+    });
   };
 
   const handleConfirm = () => {
-    // Apply mapped fields, leave unmapped as-is
-    const num = k => parseFloat(result.mapped[k]) || 0;
-    const flags = {};
-    result.missing.forEach(col => { flags[col] = true; });
-    setInlineFlags(flags);
+    // Merge all mapped data by destination, collect asset flags
+    const assetData   = {};
+    const debtData    = {};
+    const updateNote  = {};
+    const mktData     = {};
+    const finData     = {};
+    const assetFlags  = {};
 
-    onApply({
-      name:      result.mapped.name      || asset.name,
-      country:   result.mapped.country   || asset.country,
-      type:      result.mapped.type      || asset.type,
-      area:      num("area")             || asset.area,
-      bookValue: num("bookValue")        || asset.bookValue,
-      fairValue: num("fairValue")        || asset.fairValue,
-      occupancy: num("occupancy")        || asset.occupancy,
-      walb:      num("walb")             || asset.walb,
-      tenants:   result.mapped.tenants   || asset.tenants,
-    }, flags);
+    results.forEach(({fileResults}) => {
+      fileResults.forEach(({dest, mapped, missing}) => {
+        if(dest==="assets")  { Object.assign(assetData, mapped);  missing.forEach(k=>{assetFlags[k]=true;}); }
+        if(dest==="debt")    Object.assign(debtData,  mapped);
+        if(dest==="updates") Object.assign(updateNote, mapped);
+        if(dest==="market")  Object.assign(mktData,   mapped);
+        if(dest==="fin")     Object.assign(finData,   mapped);
+      });
+    });
+
+    const num = (obj,k) => parseFloat(obj[k])||0;
+    onApply(
+      {
+        name:      assetData.name      || asset.name,
+        country:   assetData.country   || asset.country,
+        type:      assetData.type      || asset.type,
+        area:      num(assetData,"area")      || asset.area,
+        bookValue: num(assetData,"bookValue") || asset.bookValue,
+        fairValue: num(assetData,"fairValue") || asset.fairValue,
+        occupancy: num(assetData,"occupancy") || asset.occupancy,
+        walb:      num(assetData,"walb")      || asset.walb,
+        tenants:   assetData.tenants   || asset.tenants,
+      },
+      assetFlags,
+      { debtData, updateNote, mktData, finData }
+    );
     onClose();
   };
 
-  const mappedCount  = result ? Object.keys(result.mapped).length  : 0;
-  const missingCount = result ? result.missing.length               : 0;
+  // Destination pill colours
+  const destColor = id => ({
+    assets: B.navy, debt: "#5B4FCF", updates: B.success,
+    market: "#B36B00", fin: B.terracotta,
+  }[id] || B.navy);
+
+  const destBg = id => ({
+    assets: B.infoBg, debt:"#EEECFB", updates:B.successBg,
+    market:B.warningBg, fin:`${B.terracotta}12`,
+  }[id] || B.infoBg);
+
+  const destBorder = id => ({
+    assets: B.infoBorder, debt:"#C4B5FD", updates:B.successBorder,
+    market:B.warningBorder, fin:`${B.terracotta}55`,
+  }[id] || B.infoBorder);
+
+  // Total mapped / missing counts across all results
+  const totalMapped  = results.reduce((n,r)=>n+r.fileResults.reduce((m,fr)=>m+Object.keys(fr.mapped).length,0),0);
+  const totalMissing = results.reduce((n,r)=>n+r.fileResults.reduce((m,fr)=>m+fr.missing.length,0),0);
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(15,39,68,0.68)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000}}>
-      <div style={{background:B.white,borderRadius:12,padding:"28px 32px",maxWidth:540,width:"92%",border:`0.5px solid ${B.border}`}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(15,39,68,0.68)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000,padding:SP.base}}>
+      <div style={{background:B.white,borderRadius:12,width:"100%",maxWidth:640,maxHeight:"90vh",display:"flex",flexDirection:"column",border:`0.5px solid ${B.border}`}}>
 
-        {/* Header */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:SP.lg}}>
-          <div>
-            <div style={{display:"flex",alignItems:"center",gap:SP.sm,marginBottom:4}}>
-              <span style={{fontSize:15,fontWeight:700,color:B.navy,fontFamily:FF}}>✦ AI Upload</span>
-              <span style={{fontSize:9,fontWeight:700,background:B.warningBg,color:B.warning,border:`0.5px solid ${B.warningBorder}`,padding:"2px 6px",borderRadius:4,letterSpacing:"0.07em",fontFamily:FF}}>DEMO</span>
+        {/* ── Header ── */}
+        <div style={{padding:"22px 28px 16px",borderBottom:`0.5px solid ${B.border}`,flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:SP.sm,marginBottom:4}}>
+                <span style={{fontSize:15,fontWeight:700,color:B.navy,fontFamily:FF}}>✦ AI Upload</span>
+                <span style={{fontSize:9,fontWeight:700,background:B.warningBg,color:B.warning,border:`0.5px solid ${B.warningBorder}`,padding:"2px 6px",borderRadius:4,letterSpacing:"0.07em",fontFamily:FF}}>DEMO</span>
+              </div>
+              <div style={{fontSize:12,color:B.textMuted,fontFamily:FF}}>Upload multiple files — assign each to one or more data destinations. Claude maps fields automatically.</div>
             </div>
-            <div style={{fontSize:12,color:B.textMuted,fontFamily:FF}}>Claude maps your file to LP Report Generator fields automatically</div>
+            <button onClick={onClose} style={{background:"none",border:"none",color:B.textMuted,cursor:"pointer",fontSize:18,lineHeight:1,padding:2,marginLeft:SP.md,flexShrink:0}}>×</button>
           </div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:B.textMuted,cursor:"pointer",fontSize:18,lineHeight:1,padding:2}}>×</button>
+          <div style={{marginTop:SP.sm,padding:"5px 10px",background:B.offWhite,borderRadius:6,border:`0.5px solid ${B.border}`,display:"inline-block"}}>
+            <span style={{fontSize:11,color:B.textSecondary,fontFamily:FF}}>Asset: </span>
+            <span style={{fontSize:11,fontWeight:700,color:B.navy,fontFamily:FF}}>{asset.name||"Unnamed"}</span>
+          </div>
         </div>
 
-        <div style={{fontSize:12,color:B.textSecondary,fontFamily:FF,marginBottom:SP.md,padding:"6px 10px",background:B.offWhite,borderRadius:6,border:`0.5px solid ${B.border}`}}>
-          Asset: <span style={{fontWeight:700,color:B.textPrimary}}>{asset.name||"Unnamed"}</span>
-        </div>
+        {/* ── Scrollable body ── */}
+        <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
 
-        {/* STEP: choose format */}
-        {step==="choose"&&(
-          <div>
-            <div style={{fontSize:12,fontWeight:600,color:B.textSecondary,fontFamily:FF,marginBottom:SP.md}}>Choose your source format:</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SP.md,marginBottom:SP.lg}}>
-              {[
-                {id:"csv",  label:"CSV / Excel", desc:"Any column names — Claude maps to LP Report Generator fields"},
-                {id:"pdf",  label:"PDF",          desc:"Asset schedule, valuation report or data room summary — high-confidence fields only"},
-              ].map(f=>(
-                <button key={f.id} onClick={()=>{setFmt(f.id);fileRef.current.click();}}
-                  style={{padding:"18px 16px",textAlign:"center",borderRadius:8,border:`0.5px solid ${fmt===f.id?B.terracotta:B.border}`,background:fmt===f.id?`${B.terracotta}0A`:B.white,cursor:"pointer",transition:"all 0.1s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.borderColor=B.terracotta;e.currentTarget.style.background=`${B.terracotta}0A`;}}
-                  onMouseLeave={e=>{e.currentTarget.style.borderColor=fmt===f.id?B.terracotta:B.border;e.currentTarget.style.background=fmt===f.id?`${B.terracotta}0A`:B.white;}}>
-                  <div style={{fontSize:14,fontWeight:700,color:B.navy,fontFamily:FF,marginBottom:6}}>{f.label}</div>
-                  <div style={{fontSize:11,color:B.textSecondary,fontFamily:FF,lineHeight:1.5}}>{f.desc}</div>
-                </button>
-              ))}
-            </div>
-            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.pdf" style={{display:"none"}}
-              onChange={e=>{const f=e.target.files[0];if(f)handleFile(f,fmt||"csv");}}/>
-            <div style={{display:"flex",justifyContent:"flex-end"}}>
-              <Btn onClick={onClose} v="ghost">Cancel</Btn>
-            </div>
-          </div>
-        )}
-
-        {/* STEP: uploading / processing */}
-        {step==="uploading"&&(
-          <div style={{textAlign:"center",padding:`${SP.xl}px 0`}}>
-            <div style={{fontSize:24,marginBottom:SP.md,animation:"spin 1s linear infinite",display:"inline-block"}}>⟳</div>
-            <div style={{fontSize:13,fontWeight:600,color:B.navy,fontFamily:FF,marginBottom:SP.sm}}>Mapping fields…</div>
-            <div style={{fontSize:12,color:B.textMuted,fontFamily:FF}}>Claude is reading your {fmt==="pdf"?"PDF":"CSV"} and matching columns to asset fields.</div>
-            <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
-          </div>
-        )}
-
-        {/* STEP: gap summary modal */}
-        {step==="gaps"&&result&&(
-          <div>
-            {/* Summary pills */}
-            <div style={{display:"flex",gap:SP.sm,marginBottom:SP.lg}}>
-              <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,background:B.successBg,color:B.success,border:`0.5px solid ${B.successBorder}`,fontFamily:FF}}>
-                {mappedCount} field{mappedCount!==1?"s":""} mapped
-              </span>
-              {missingCount>0&&(
-                <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,background:B.warningBg,color:B.warning,border:`0.5px solid ${B.warningBorder}`,fontFamily:FF}}>
-                  {missingCount} field{missingCount!==1?"s":""} missing
-                </span>
-              )}
-              {result.unmapped?.length>0&&(
-                <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,background:B.offWhite,color:B.textSecondary,border:`0.5px solid ${B.border}`,fontFamily:FF}}>
-                  {result.unmapped.length} unrecognised column{result.unmapped.length!==1?"s":""}
-                </span>
-              )}
+          {/* ── STAGE: file staging ── */}
+          {step==="stage"&&<>
+            {/* Drop zone */}
+            <div
+              onDragOver={e=>{e.preventDefault();setDragging(true);}}
+              onDragLeave={()=>setDragging(false)}
+              onDrop={e=>{e.preventDefault();setDragging(false);addFiles(e.dataTransfer.files);}}
+              onClick={()=>dropRef.current.click()}
+              style={{border:`1.5px dashed ${dragging?B.terracotta:B.borderDark}`,borderRadius:10,padding:"24px 20px",textAlign:"center",cursor:"pointer",
+                background:dragging?`${B.terracotta}08`:B.offWhite,marginBottom:SP.lg,transition:"all 0.1s"}}
+            >
+              <input ref={dropRef} type="file" multiple accept=".csv,.xlsx,.xls,.pdf" style={{display:"none"}}
+                onChange={e=>addFiles(e.target.files)}/>
+              <div style={{fontSize:20,color:B.textMuted,marginBottom:SP.sm}}>↑</div>
+              <div style={{fontSize:13,fontWeight:600,color:B.textSecondary,fontFamily:FF,marginBottom:4}}>Drop files here or click to browse</div>
+              <div style={{fontSize:11,color:B.textMuted,fontFamily:FF}}>CSV, Excel or PDF — add as many as needed</div>
             </div>
 
-            {/* Field-by-field breakdown */}
-            <div style={{marginBottom:SP.md}}>
-              <div style={{fontSize:11,fontWeight:600,color:B.textSecondary,fontFamily:FF,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:SP.sm}}>Field mapping</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:`${SP.xs}px ${SP.sm}px`}}>
-                {ASSET_TEMPLATE_COLS.map(col=>{
-                  const val     = result.mapped[col];
-                  const missing = result.missing.includes(col);
-                  return (
-                    <div key={col} style={{padding:"6px 8px",borderRadius:6,background:missing?B.warningBg:B.successBg,border:`0.5px solid ${missing?B.warningBorder:B.successBorder}`}}>
-                      <div style={{fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color:missing?B.warning:B.success,fontFamily:FF,marginBottom:2}}>{FIELD_LABELS[col]}</div>
-                      <div style={{fontSize:11,fontFamily:FF,color:missing?B.warning:B.textPrimary,fontWeight:missing?600:400}}>{missing?"Not found":val}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {result.unmapped?.length>0&&(
-              <div style={{marginBottom:SP.md,padding:"8px 12px",background:B.offWhite,borderRadius:6,border:`0.5px solid ${B.border}`}}>
-                <div style={{fontSize:11,fontWeight:600,color:B.textSecondary,fontFamily:FF,marginBottom:4}}>Unrecognised columns (ignored)</div>
-                <div style={{fontSize:11,color:B.textMuted,fontFamily:FF}}>{result.unmapped.join(" · ")}</div>
-              </div>
+            {/* File list */}
+            {files.length===0&&(
+              <div style={{textAlign:"center",padding:`${SP.xl}px 0`,color:B.textMuted,fontSize:12,fontFamily:FF}}>No files added yet.</div>
             )}
+            {files.map(f=>(
+              <div key={f.id} style={{border:`0.5px solid ${B.border}`,borderRadius:10,padding:"14px 16px",marginBottom:SP.sm,background:B.white}}>
+                {/* File name row */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:SP.md}}>
+                  <div style={{display:"flex",alignItems:"center",gap:SP.sm}}>
+                    <span style={{fontSize:15}}>{f.file.name.endsWith(".pdf")?"📄":"📊"}</span>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600,color:B.textPrimary,fontFamily:FF}}>{f.file.name}</div>
+                      <div style={{fontSize:10,color:B.textMuted,fontFamily:FF}}>{(f.file.size/1024).toFixed(0)} KB · {f.file.name.split(".").pop().toUpperCase()}</div>
+                    </div>
+                  </div>
+                  <button onClick={()=>removeFile(f.id)} style={{background:"none",border:"none",color:B.textMuted,cursor:"pointer",fontSize:16,lineHeight:1,padding:2}}
+                    onMouseEnter={e=>e.currentTarget.style.color=B.danger}
+                    onMouseLeave={e=>e.currentTarget.style.color=B.textMuted}>×</button>
+                </div>
 
-            {missingCount>0&&(
-              <div style={{marginBottom:SP.md,padding:"8px 12px",background:B.warningBg,borderRadius:6,border:`0.5px solid ${B.warningBorder}`}}>
-                <div style={{fontSize:12,color:B.warning,fontFamily:FF,lineHeight:1.5}}>
-                  <span style={{fontWeight:700}}>Missing fields will be flagged inline</span> on the asset row after you confirm. You can fill them in manually.
+                {/* Destination selector */}
+                <div>
+                  <div style={{fontSize:10,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",color:B.textMuted,fontFamily:FF,marginBottom:SP.sm}}>
+                    Map this file to:
+                  </div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:SP.sm}}>
+                    {AI_DESTINATIONS.map(dest=>{
+                      const active = f.dests.has(dest.id);
+                      return (
+                        <button key={dest.id} onClick={()=>toggleDest(f.id,dest.id)}
+                          title={dest.desc}
+                          style={{padding:"4px 12px",fontSize:11,fontWeight:600,fontFamily:FF,borderRadius:20,cursor:"pointer",transition:"all 0.1s",
+                            border:`0.5px solid ${active?destBorder(dest.id):B.border}`,
+                            background:active?destBg(dest.id):"transparent",
+                            color:active?destColor(dest.id):B.textMuted}}>
+                          {dest.label}
+                          {active&&<span style={{marginLeft:4,opacity:0.7}}>✓</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{marginTop:SP.xs,fontSize:10,color:B.textMuted,fontFamily:FF}}>
+                    {Array.from(f.dests).map(d=>AI_DESTINATIONS.find(x=>x.id===d)?.desc).join(" · ")}
+                  </div>
                 </div>
               </div>
-            )}
+            ))}
+          </>}
 
-            <div style={{display:"flex",gap:SP.sm,justifyContent:"flex-end"}}>
-              <Btn onClick={onClose} v="ghost">Cancel</Btn>
-              <Btn onClick={handleConfirm} v="primary">Confirm & Apply →</Btn>
+          {/* ── PROCESSING ── */}
+          {step==="processing"&&(
+            <div style={{textAlign:"center",padding:`${SP.xl}px 0`}}>
+              <div style={{fontSize:26,marginBottom:SP.md,display:"inline-block",
+                animation:"spin 1s linear infinite"}}>⟳</div>
+              <div style={{fontSize:14,fontWeight:600,color:B.navy,fontFamily:FF,marginBottom:SP.sm}}>Mapping {files.length} file{files.length!==1?"s":""}…</div>
+              <div style={{display:"flex",flexDirection:"column",gap:SP.sm,maxWidth:300,margin:"0 auto",marginTop:SP.lg}}>
+                {files.map((f,i)=>(
+                  <div key={f.id} style={{display:"flex",alignItems:"center",gap:SP.sm,padding:"7px 12px",borderRadius:8,background:B.offWhite,border:`0.5px solid ${B.border}`}}>
+                    <div style={{width:16,height:16,borderRadius:"50%",border:`2px solid ${B.terracotta}`,borderTopColor:"transparent",
+                      animation:`spin ${0.8+i*0.15}s linear infinite`,flexShrink:0}}/>
+                    <span style={{fontSize:11,color:B.textSecondary,fontFamily:FF,flex:1,textAlign:"left"}}>{f.file.name}</span>
+                    <span style={{fontSize:9,color:B.textMuted,fontFamily:FF}}>
+                      {Array.from(f.dests).map(d=>AI_DESTINATIONS.find(x=>x.id===d)?.label).join(", ")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
             </div>
+          )}
+
+          {/* ── GAPS SUMMARY ── */}
+          {step==="gaps"&&results.length>0&&(
+            <div>
+              {/* Overall summary pills */}
+              <div style={{display:"flex",gap:SP.sm,marginBottom:SP.lg,flexWrap:"wrap"}}>
+                <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,background:B.successBg,color:B.success,border:`0.5px solid ${B.successBorder}`,fontFamily:FF}}>
+                  {totalMapped} field{totalMapped!==1?"s":""} mapped
+                </span>
+                {totalMissing>0&&<span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,background:B.warningBg,color:B.warning,border:`0.5px solid ${B.warningBorder}`,fontFamily:FF}}>
+                  {totalMissing} field{totalMissing!==1?"s":""} missing
+                </span>}
+                <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,background:B.offWhite,color:B.textSecondary,border:`0.5px solid ${B.border}`,fontFamily:FF}}>
+                  {files.length} file{files.length!==1?"s":""} processed
+                </span>
+              </div>
+
+              {/* Per-file, per-destination breakdown */}
+              {results.map(({fileId,fileName,fileResults})=>(
+                <div key={fileId} style={{marginBottom:SP.md,border:`0.5px solid ${B.border}`,borderRadius:10,overflow:"hidden"}}>
+                  {/* File header */}
+                  <div style={{padding:"10px 14px",background:B.offWhite,borderBottom:`0.5px solid ${B.border}`,display:"flex",alignItems:"center",gap:SP.sm}}>
+                    <span style={{fontSize:13}}>{fileName.endsWith(".pdf")?"📄":"📊"}</span>
+                    <span style={{fontSize:12,fontWeight:600,color:B.textPrimary,fontFamily:FF}}>{fileName}</span>
+                  </div>
+
+                  {fileResults.map(({dest,mapped,missing,unmapped})=>{
+                    const destInfo = AI_DESTINATIONS.find(d=>d.id===dest);
+                    const mCount   = Object.keys(mapped).length;
+                    const xCount   = missing.length;
+                    return (
+                      <div key={dest} style={{padding:"12px 14px",borderBottom:`0.5px solid ${B.border}`}}>
+                        {/* Destination label + counts */}
+                        <div style={{display:"flex",alignItems:"center",gap:SP.sm,marginBottom:SP.sm}}>
+                          <span style={{fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20,fontFamily:FF,
+                            background:destBg(dest),color:destColor(dest),border:`0.5px solid ${destBorder(dest)}`}}>
+                            {destInfo?.label}
+                          </span>
+                          <span style={{fontSize:10,color:B.success,fontFamily:FF}}>✓ {mCount} mapped</span>
+                          {xCount>0&&<span style={{fontSize:10,color:B.warning,fontFamily:FF}}>⚠ {xCount} missing</span>}
+                        </div>
+
+                        {/* Mapped fields */}
+                        {mCount>0&&(
+                          <div style={{display:"flex",flexWrap:"wrap",gap:SP.xs,marginBottom:xCount>0?SP.xs:0}}>
+                            {Object.entries(mapped).map(([k,v])=>(
+                              <div key={k} style={{padding:"3px 8px",borderRadius:5,background:B.successBg,border:`0.5px solid ${B.successBorder}`}}>
+                                <span style={{fontSize:9,color:B.success,fontFamily:FF,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.04em"}}>{k}: </span>
+                                <span style={{fontSize:10,color:B.textPrimary,fontFamily:FF}}>{String(v).slice(0,30)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Missing fields */}
+                        {xCount>0&&(
+                          <div style={{display:"flex",flexWrap:"wrap",gap:SP.xs,marginTop:SP.xs}}>
+                            {missing.map(k=>(
+                              <div key={k} style={{padding:"3px 8px",borderRadius:5,background:B.warningBg,border:`0.5px solid ${B.warningBorder}`}}>
+                                <span style={{fontSize:10,color:B.warning,fontFamily:FF}}>{k}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Unrecognised */}
+                        {unmapped?.length>0&&(
+                          <div style={{marginTop:SP.xs,fontSize:10,color:B.textMuted,fontFamily:FF}}>
+                            Ignored: {unmapped.join(" · ")}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+
+              {totalMissing>0&&(
+                <div style={{padding:"9px 12px",background:B.warningBg,borderRadius:8,border:`0.5px solid ${B.warningBorder}`}}>
+                  <div style={{fontSize:12,color:B.warning,fontFamily:FF,lineHeight:1.5}}>
+                    <span style={{fontWeight:700}}>Missing fields will be flagged inline</span> on the asset row. You can fill them in manually after confirming.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div style={{padding:"14px 28px",borderTop:`0.5px solid ${B.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:B.white}}>
+          <div style={{fontSize:11,color:B.textMuted,fontFamily:FF}}>
+            {step==="stage"&&`${files.length} file${files.length!==1?"s":""} staged`}
+            {step==="processing"&&"Processing…"}
+            {step==="gaps"&&`${files.length} file${files.length!==1?"s":""} ready to apply`}
           </div>
-        )}
+          <div style={{display:"flex",gap:SP.sm}}>
+            <Btn onClick={onClose} v="ghost">Cancel</Btn>
+            {step==="stage"&&<Btn onClick={handleProcess} disabled={!files.length} v="primary">Process Files →</Btn>}
+            {step==="gaps"&&<Btn onClick={handleConfirm} v="primary">Confirm & Apply →</Btn>}
+          </div>
+        </div>
 
       </div>
     </div>
@@ -972,7 +1144,7 @@ function Step2({assets,setAssets,debt,setDebt,notes,setNotes,mkt,setMkt,fin,setF
 
     {tab==="assets"&&<div style={{overflowX:"auto"}}>
       {/* AI Upload Modal */}
-      {aiOpen&&(()=>{const a=assets.find(x=>x.id===aiOpen);return a?<AiUploadModal asset={a} onApply={(data,flags)=>applyAiUpload(a.id,data,flags)} onClose={()=>setAiOpen(null)}/>:null;})()}
+      {aiOpen&&(()=>{const a=assets.find(x=>x.id===aiOpen);return a?<AiUploadModal asset={a} onApply={(data,flags,_extra)=>applyAiUpload(a.id,data,flags)} onClose={()=>setAiOpen(null)}/>:null;})()}
 
       <table style={{width:"100%",borderCollapse:"collapse"}}>
         <thead><tr>{["Asset","Country","Type","GLA","BV €m","FV €m","Occ%","WALB","Tenants",""].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
