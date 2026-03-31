@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 
 // ─── BRAND TOKENS ─────────────────────────────────────────────────────────────
 const B = {
@@ -519,16 +519,418 @@ function FinancialsTab({fin,setFin,assets,debt}){
   </div>;
 }
 
+// ─── CSV TEMPLATE DEFINITIONS ────────────────────────────────────────────────
+const ASSET_TEMPLATE_COLS = ["name","country","type","area","bookValue","fairValue","occupancy","walb","tenants"];
+const DEBT_TEMPLATE_COLS  = ["assetRef","lender","outstanding","ltv","margin","maturity","covenantLtv","covenantDscr","hedged"];
+const MKT_TEMPLATE_COLS   = ["geo","src","pub","date","primeYield","vacancy","rentalGrowth","investActivity","occupierDemand","notes"];
+const FIN_TEMPLATE_COLS   = ["priorNav","valuationMovement","incomeAccrued","feesExpenses","distributions","otherMovements","liabilities"];
+
+function downloadCSV(filename, cols, rows=[]) {
+  const header = cols.join(",");
+  const body   = rows.map(r => cols.map(c => `"${(r[c]??"")}"`).join(",")).join("\n");
+  const blob   = new Blob([header + (body ? "\n"+body : "")], {type:"text/csv"});
+  const a      = document.createElement("a");
+  a.href       = URL.createObjectURL(blob);
+  a.download   = filename;
+  a.click();
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g,"").trim());
+  return lines.slice(1).map(line => {
+    const vals = line.match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,)|(?<=,)$)/g) || [];
+    const obj  = {};
+    headers.forEach((h,i) => { obj[h] = (vals[i]||"").replace(/^"|"$/g,"").trim(); });
+    return obj;
+  });
+}
+
+// ─── AI FIELD MAPPING (DEMO) ──────────────────────────────────────────────────
+// Maps arbitrary column names → asset schema keys
+const AI_FIELD_MAP = {
+  // name
+  "asset name":"name","property name":"name","asset":"name","property":"name","building":"name",
+  // country
+  "country":"country","location":"country","market":"country","geography":"country",
+  // type
+  "type":"type","asset type":"type","property type":"type","sector":"type",
+  // area
+  "area":"area","gla":"area","gla (sqm)":"area","gross leasable area":"area","size":"area","sqm":"area","floor area":"area",
+  // bookValue
+  "book value":"bookValue","bv":"bookValue","bv (€m)":"bookValue","cost":"bookValue","acquisition cost":"bookValue","purchase price":"bookValue",
+  // fairValue
+  "fair value":"fairValue","fv":"fairValue","fv (€m)":"fairValue","valuation":"fairValue","appraised value":"fairValue","market value":"fairValue",
+  // occupancy
+  "occupancy":"occupancy","occ":"occupancy","occ%":"occupancy","occupancy rate":"occupancy","occupancy %":"occupancy","leased %":"occupancy",
+  // walb
+  "walb":"walb","wault":"walb","walb (years)":"walb","weighted avg lease break":"walb","lease expiry":"walb",
+  // tenants
+  "tenants":"tenants","tenant":"tenants","key tenants":"tenants","occupiers":"tenants","tenant name":"tenants",
+};
+
+function aiMapRow(rawRow) {
+  const mapped  = {};
+  const missing = [];
+  const unmapped = [];
+
+  ASSET_TEMPLATE_COLS.forEach(col => {
+    // try direct match first, then normalised
+    let found = false;
+    for (const [rawKey, val] of Object.entries(rawRow)) {
+      const norm = rawKey.toLowerCase().trim();
+      if (norm === col || AI_FIELD_MAP[norm] === col) {
+        mapped[col] = val;
+        found = true;
+        break;
+      }
+    }
+    if (!found) missing.push(col);
+  });
+
+  // flag raw keys that couldn't be mapped at all
+  Object.keys(rawRow).forEach(k => {
+    const norm = k.toLowerCase().trim();
+    if (!AI_FIELD_MAP[norm] && !ASSET_TEMPLATE_COLS.includes(norm)) {
+      unmapped.push(k);
+    }
+  });
+
+  return { mapped, missing, unmapped };
+}
+
+// ─── TEMPLATE DOWNLOAD MODAL ─────────────────────────────────────────────────
+function TemplateModal({ onClose }) {
+  const templates = [
+    { label:"Assets",     desc:"Core asset table — name, country, type, GLA, valuations, occupancy, WALB, tenants", cols:ASSET_TEMPLATE_COLS, file:"template_assets.csv" },
+    { label:"Debt",       desc:"Debt schedule per asset — lender, outstanding, LTV, margin, maturity, covenants",    cols:DEBT_TEMPLATE_COLS,  file:"template_debt.csv"   },
+    { label:"Market",     desc:"Market data by geography — yields, vacancy, rental growth, occupier demand",          cols:MKT_TEMPLATE_COLS,   file:"template_market.csv" },
+    { label:"Financials", desc:"NAV bridge inputs — prior NAV, valuation movement, income, fees, distributions",      cols:FIN_TEMPLATE_COLS,   file:"template_financials.csv" },
+  ];
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,39,68,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000}}>
+      <div style={{background:B.white,borderRadius:12,padding:"28px 32px",maxWidth:520,width:"90%",border:`0.5px solid ${B.border}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:SP.lg}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:700,color:B.navy,fontFamily:FF}}>Download Template</div>
+            <div style={{fontSize:12,color:B.textMuted,fontFamily:FF,marginTop:3}}>Choose which dataset template to download</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:B.textMuted,cursor:"pointer",fontSize:18,lineHeight:1,padding:2}}>×</button>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:SP.sm}}>
+          {templates.map(t => (
+            <div key={t.label} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",border:`0.5px solid ${B.border}`,borderRadius:8,background:B.offWhite}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:600,color:B.textPrimary,fontFamily:FF}}>{t.label}</div>
+                <div style={{fontSize:11,color:B.textMuted,fontFamily:FF,marginTop:2,maxWidth:340}}>{t.desc}</div>
+              </div>
+              <button
+                onClick={()=>downloadCSV(t.file, t.cols)}
+                style={{flexShrink:0,marginLeft:SP.md,padding:"6px 14px",fontSize:11,fontWeight:600,fontFamily:FF,
+                  border:`0.5px solid ${B.navy}`,borderRadius:6,background:"transparent",color:B.navy,cursor:"pointer",whiteSpace:"nowrap"}}
+                onMouseEnter={e=>{e.currentTarget.style.background=B.navy;e.currentTarget.style.color=B.white;}}
+                onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=B.navy;}}
+              >↓ Download</button>
+            </div>
+          ))}
+        </div>
+        <div style={{marginTop:SP.lg,textAlign:"right"}}>
+          <Btn onClick={onClose} v="ghost">Close</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── CSV UPLOAD PANEL (per asset row) ────────────────────────────────────────
+function CsvUploadPanel({ asset, onApply, onClose }) {
+  const fileRef = useRef();
+  const [file,    setFile]    = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [error,   setError]   = useState("");
+  const [showTpl, setShowTpl] = useState(false);
+
+  const handleFile = f => {
+    setFile(f); setError(""); setPreview(null);
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const rows = parseCSV(e.target.result);
+        if (!rows.length) { setError("No data rows found in file."); return; }
+        setPreview(rows[0]); // show first row as preview
+      } catch(_) { setError("Could not parse file. Ensure it is a valid CSV."); }
+    };
+    reader.readAsText(f);
+  };
+
+  const handleApply = () => {
+    if (!preview) return;
+    const num = k => parseFloat(preview[k]) || 0;
+    onApply({
+      name:       preview.name       || asset.name,
+      country:    preview.country    || asset.country,
+      type:       preview.type       || asset.type,
+      area:       num("area")        || asset.area,
+      bookValue:  num("bookValue")   || asset.bookValue,
+      fairValue:  num("fairValue")   || asset.fairValue,
+      occupancy:  num("occupancy")   || asset.occupancy,
+      walb:       num("walb")        || asset.walb,
+      tenants:    preview.tenants    || asset.tenants,
+    });
+    onClose();
+  };
+
+  const FIELD_LABELS = {name:"Asset Name",country:"Country",type:"Type",area:"GLA (sqm)",bookValue:"Book Value €m",fairValue:"Fair Value €m",occupancy:"Occupancy %",walb:"WALB (yrs)",tenants:"Tenants"};
+
+  return (
+    <div style={{padding:"14px 16px",background:B.offWhite,borderRadius:8,border:`0.5px solid ${B.border}`,marginTop:SP.sm}}>
+      {showTpl && <TemplateModal onClose={()=>setShowTpl(false)}/>}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:SP.md}}>
+        <div style={{fontSize:12,fontWeight:700,color:B.textPrimary,fontFamily:FF}}>Upload CSV — {asset.name||"Unnamed Asset"}</div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:B.textMuted,cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>
+      </div>
+      <div style={{display:"flex",gap:SP.sm,marginBottom:SP.md}}>
+        <button
+          onClick={()=>setShowTpl(true)}
+          style={{padding:"6px 12px",fontSize:11,fontWeight:600,fontFamily:FF,border:`0.5px solid ${B.navy}`,borderRadius:6,background:"transparent",color:B.navy,cursor:"pointer"}}
+          onMouseEnter={e=>{e.currentTarget.style.background=B.navy;e.currentTarget.style.color=B.white;}}
+          onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=B.navy;}}
+        >↓ Download Template</button>
+        <button
+          onClick={()=>fileRef.current.click()}
+          style={{padding:"6px 12px",fontSize:11,fontWeight:600,fontFamily:FF,border:`0.5px solid ${B.border}`,borderRadius:6,background:B.white,color:B.textSecondary,cursor:"pointer"}}
+        >↑ {file ? file.name : "Choose CSV file"}</button>
+        <input ref={fileRef} type="file" accept=".csv" style={{display:"none"}} onChange={e=>e.target.files[0]&&handleFile(e.target.files[0])}/>
+      </div>
+      {error && <div style={{fontSize:12,color:B.danger,fontFamily:FF,marginBottom:SP.sm}}>{error}</div>}
+      {preview && (
+        <div>
+          <div style={{fontSize:11,fontWeight:600,color:B.textSecondary,fontFamily:FF,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:SP.sm}}>Preview — first row</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:`${SP.xs}px ${SP.sm}px`,marginBottom:SP.md}}>
+            {ASSET_TEMPLATE_COLS.map(col => {
+              const val = preview[col];
+              const empty = !val || val === "";
+              return (
+                <div key={col} style={{padding:"6px 8px",borderRadius:6,background:empty?B.warningBg:B.white,border:`0.5px solid ${empty?B.warningBorder:B.border}`}}>
+                  <div style={{fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color:empty?B.warning:B.textMuted,fontFamily:FF,marginBottom:2}}>{FIELD_LABELS[col]}</div>
+                  <div style={{fontSize:11,color:empty?B.warning:B.textPrimary,fontFamily:FF,fontWeight:empty?600:400}}>{empty?"Missing":val}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{display:"flex",gap:SP.sm,justifyContent:"flex-end"}}>
+            <Btn onClick={onClose} v="ghost">Cancel</Btn>
+            <Btn onClick={handleApply} v="primary">Apply to Asset →</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── AI UPLOAD MODAL (per asset row) ─────────────────────────────────────────
+const AI_DEMO_DELAY = 1400; // ms simulated processing time
+
+function AiUploadModal({ asset, onApply, onClose }) {
+  const fileRef  = useRef();
+  const [step,   setStep]   = useState("choose");   // choose | uploading | gaps | done
+  const [fmt,    setFmt]    = useState(null);        // "csv" | "pdf"
+  const [file,   setFile]   = useState(null);
+  const [result, setResult] = useState(null);        // { mapped, missing, unmapped }
+  const [inlineFlags, setInlineFlags] = useState({}); // col → true if flagged after confirm
+
+  const FIELD_LABELS = {name:"Asset Name",country:"Country",type:"Type",area:"GLA (sqm)",bookValue:"Book Value €m",fairValue:"Fair Value €m",occupancy:"Occupancy %",walb:"WALB (yrs)",tenants:"Tenants"};
+
+  const handleFile = (f, format) => {
+    setFile(f); setFmt(format); setStep("uploading");
+    const reader = new FileReader();
+    reader.onload = e => {
+      setTimeout(() => {
+        let rows = [];
+        try { rows = parseCSV(e.target.result); } catch(_) {}
+        const raw = rows[0] || {};
+        const res = aiMapRow(raw);
+
+        // Demo fallback: if file has no recognisable structure, use a plausible demo result
+        if (!rows.length || Object.keys(raw).length === 0) {
+          const demoMapped = { name: asset.name, country: asset.country, type: asset.type };
+          const demoMissing = ["area","bookValue","fairValue","occupancy","walb","tenants"];
+          res.mapped  = demoMapped;
+          res.missing = demoMissing;
+          res.unmapped = format === "pdf" ? ["Page header", "Footnotes", "Signature block"] : [];
+        }
+        setResult(res);
+        setStep("gaps");
+      }, AI_DEMO_DELAY);
+    };
+    reader.readAsText(f);
+  };
+
+  const handleConfirm = () => {
+    // Apply mapped fields, leave unmapped as-is
+    const num = k => parseFloat(result.mapped[k]) || 0;
+    const flags = {};
+    result.missing.forEach(col => { flags[col] = true; });
+    setInlineFlags(flags);
+
+    onApply({
+      name:      result.mapped.name      || asset.name,
+      country:   result.mapped.country   || asset.country,
+      type:      result.mapped.type      || asset.type,
+      area:      num("area")             || asset.area,
+      bookValue: num("bookValue")        || asset.bookValue,
+      fairValue: num("fairValue")        || asset.fairValue,
+      occupancy: num("occupancy")        || asset.occupancy,
+      walb:      num("walb")             || asset.walb,
+      tenants:   result.mapped.tenants   || asset.tenants,
+    }, flags);
+    onClose();
+  };
+
+  const mappedCount  = result ? Object.keys(result.mapped).length  : 0;
+  const missingCount = result ? result.missing.length               : 0;
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,39,68,0.68)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000}}>
+      <div style={{background:B.white,borderRadius:12,padding:"28px 32px",maxWidth:540,width:"92%",border:`0.5px solid ${B.border}`}}>
+
+        {/* Header */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:SP.lg}}>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:SP.sm,marginBottom:4}}>
+              <span style={{fontSize:15,fontWeight:700,color:B.navy,fontFamily:FF}}>✦ AI Upload</span>
+              <span style={{fontSize:9,fontWeight:700,background:B.warningBg,color:B.warning,border:`0.5px solid ${B.warningBorder}`,padding:"2px 6px",borderRadius:4,letterSpacing:"0.07em",fontFamily:FF}}>DEMO</span>
+            </div>
+            <div style={{fontSize:12,color:B.textMuted,fontFamily:FF}}>Claude maps your file to LP Report Generator fields automatically</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:B.textMuted,cursor:"pointer",fontSize:18,lineHeight:1,padding:2}}>×</button>
+        </div>
+
+        <div style={{fontSize:12,color:B.textSecondary,fontFamily:FF,marginBottom:SP.md,padding:"6px 10px",background:B.offWhite,borderRadius:6,border:`0.5px solid ${B.border}`}}>
+          Asset: <span style={{fontWeight:700,color:B.textPrimary}}>{asset.name||"Unnamed"}</span>
+        </div>
+
+        {/* STEP: choose format */}
+        {step==="choose"&&(
+          <div>
+            <div style={{fontSize:12,fontWeight:600,color:B.textSecondary,fontFamily:FF,marginBottom:SP.md}}>Choose your source format:</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:SP.md,marginBottom:SP.lg}}>
+              {[
+                {id:"csv",  label:"CSV / Excel", desc:"Any column names — Claude maps to LP Report Generator fields"},
+                {id:"pdf",  label:"PDF",          desc:"Asset schedule, valuation report or data room summary — high-confidence fields only"},
+              ].map(f=>(
+                <button key={f.id} onClick={()=>{setFmt(f.id);fileRef.current.click();}}
+                  style={{padding:"18px 16px",textAlign:"center",borderRadius:8,border:`0.5px solid ${fmt===f.id?B.terracotta:B.border}`,background:fmt===f.id?`${B.terracotta}0A`:B.white,cursor:"pointer",transition:"all 0.1s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=B.terracotta;e.currentTarget.style.background=`${B.terracotta}0A`;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=fmt===f.id?B.terracotta:B.border;e.currentTarget.style.background=fmt===f.id?`${B.terracotta}0A`:B.white;}}>
+                  <div style={{fontSize:14,fontWeight:700,color:B.navy,fontFamily:FF,marginBottom:6}}>{f.label}</div>
+                  <div style={{fontSize:11,color:B.textSecondary,fontFamily:FF,lineHeight:1.5}}>{f.desc}</div>
+                </button>
+              ))}
+            </div>
+            <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.pdf" style={{display:"none"}}
+              onChange={e=>{const f=e.target.files[0];if(f)handleFile(f,fmt||"csv");}}/>
+            <div style={{display:"flex",justifyContent:"flex-end"}}>
+              <Btn onClick={onClose} v="ghost">Cancel</Btn>
+            </div>
+          </div>
+        )}
+
+        {/* STEP: uploading / processing */}
+        {step==="uploading"&&(
+          <div style={{textAlign:"center",padding:`${SP.xl}px 0`}}>
+            <div style={{fontSize:24,marginBottom:SP.md,animation:"spin 1s linear infinite",display:"inline-block"}}>⟳</div>
+            <div style={{fontSize:13,fontWeight:600,color:B.navy,fontFamily:FF,marginBottom:SP.sm}}>Mapping fields…</div>
+            <div style={{fontSize:12,color:B.textMuted,fontFamily:FF}}>Claude is reading your {fmt==="pdf"?"PDF":"CSV"} and matching columns to asset fields.</div>
+            <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+          </div>
+        )}
+
+        {/* STEP: gap summary modal */}
+        {step==="gaps"&&result&&(
+          <div>
+            {/* Summary pills */}
+            <div style={{display:"flex",gap:SP.sm,marginBottom:SP.lg}}>
+              <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,background:B.successBg,color:B.success,border:`0.5px solid ${B.successBorder}`,fontFamily:FF}}>
+                {mappedCount} field{mappedCount!==1?"s":""} mapped
+              </span>
+              {missingCount>0&&(
+                <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,background:B.warningBg,color:B.warning,border:`0.5px solid ${B.warningBorder}`,fontFamily:FF}}>
+                  {missingCount} field{missingCount!==1?"s":""} missing
+                </span>
+              )}
+              {result.unmapped?.length>0&&(
+                <span style={{fontSize:11,fontWeight:600,padding:"3px 10px",borderRadius:20,background:B.offWhite,color:B.textSecondary,border:`0.5px solid ${B.border}`,fontFamily:FF}}>
+                  {result.unmapped.length} unrecognised column{result.unmapped.length!==1?"s":""}
+                </span>
+              )}
+            </div>
+
+            {/* Field-by-field breakdown */}
+            <div style={{marginBottom:SP.md}}>
+              <div style={{fontSize:11,fontWeight:600,color:B.textSecondary,fontFamily:FF,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:SP.sm}}>Field mapping</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:`${SP.xs}px ${SP.sm}px`}}>
+                {ASSET_TEMPLATE_COLS.map(col=>{
+                  const val     = result.mapped[col];
+                  const missing = result.missing.includes(col);
+                  return (
+                    <div key={col} style={{padding:"6px 8px",borderRadius:6,background:missing?B.warningBg:B.successBg,border:`0.5px solid ${missing?B.warningBorder:B.successBorder}`}}>
+                      <div style={{fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.05em",color:missing?B.warning:B.success,fontFamily:FF,marginBottom:2}}>{FIELD_LABELS[col]}</div>
+                      <div style={{fontSize:11,fontFamily:FF,color:missing?B.warning:B.textPrimary,fontWeight:missing?600:400}}>{missing?"Not found":val}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {result.unmapped?.length>0&&(
+              <div style={{marginBottom:SP.md,padding:"8px 12px",background:B.offWhite,borderRadius:6,border:`0.5px solid ${B.border}`}}>
+                <div style={{fontSize:11,fontWeight:600,color:B.textSecondary,fontFamily:FF,marginBottom:4}}>Unrecognised columns (ignored)</div>
+                <div style={{fontSize:11,color:B.textMuted,fontFamily:FF}}>{result.unmapped.join(" · ")}</div>
+              </div>
+            )}
+
+            {missingCount>0&&(
+              <div style={{marginBottom:SP.md,padding:"8px 12px",background:B.warningBg,borderRadius:6,border:`0.5px solid ${B.warningBorder}`}}>
+                <div style={{fontSize:12,color:B.warning,fontFamily:FF,lineHeight:1.5}}>
+                  <span style={{fontWeight:700}}>Missing fields will be flagged inline</span> on the asset row after you confirm. You can fill them in manually.
+                </div>
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:SP.sm,justifyContent:"flex-end"}}>
+              <Btn onClick={onClose} v="ghost">Cancel</Btn>
+              <Btn onClick={handleConfirm} v="primary">Confirm & Apply →</Btn>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // STEP 2
 // ═══════════════════════════════════════════════════════════════════════════════
 function Step2({assets,setAssets,debt,setDebt,notes,setNotes,mkt,setMkt,fin,setFin,onBack,onNext}){
   const [tab,setTab]=useState("assets");
+  const [csvOpen,setCsvOpen]=useState(null);
+  const [aiOpen,setAiOpen]=useState(null);
+  const [aiFlags,setAiFlags]=useState({});
+
   const ua=(id,k,v)=>setAssets(a=>a.map(x=>x.id===id?{...x,[k]:v}:x));
   const ud=(id,k,v)=>setDebt(d=>d.map(x=>x.id===id?{...x,[k]:v}:x));
   const addA=()=>{const a=mkA();setAssets(p=>[...p,a]);setDebt(p=>[...p,mkD(a.name)]);setNotes(n=>({...n,[a.id]:""}));};
   const remA=id=>{const a=assets.find(x=>x.id===id);setAssets(p=>p.filter(x=>x.id!==id));setDebt(d=>d.filter(x=>x.assetRef!==a?.name));setNotes(n=>{const c={...n};delete c[id];return c;});};
   const tFV=assets.reduce((s,a)=>s+a.fairValue,0); const tBV=assets.reduce((s,a)=>s+a.bookValue,0); const tD=debt.reduce((s,d)=>s+d.outstanding,0);
+
+  const applyUpload=(id,data)=>setAssets(prev=>prev.map(x=>x.id===id?{...x,...data}:x));
+  const applyAiUpload=(id,data,flags)=>{
+    setAssets(prev=>prev.map(x=>x.id===id?{...x,...data}:x));
+    if(flags&&Object.keys(flags).length>0) setAiFlags(prev=>({...prev,[id]:flags}));
+  };
 
   const th={padding:"7px 10px",fontSize:11,fontWeight:600,color:B.textSecondary,textTransform:"uppercase",letterSpacing:"0.06em",fontFamily:FF,textAlign:"left",borderBottom:`0.5px solid ${B.border}`,background:B.offWhite,whiteSpace:"nowrap"};
   const td={padding:"4px 10px",borderBottom:`0.5px solid ${B.border}`,verticalAlign:"middle"};
@@ -569,35 +971,104 @@ function Step2({assets,setAssets,debt,setDebt,notes,setNotes,mkt,setMkt,fin,setF
     </div>
 
     {tab==="assets"&&<div style={{overflowX:"auto"}}>
+      {/* AI Upload Modal */}
+      {aiOpen&&(()=>{const a=assets.find(x=>x.id===aiOpen);return a?<AiUploadModal asset={a} onApply={(data,flags)=>applyAiUpload(a.id,data,flags)} onClose={()=>setAiOpen(null)}/>:null;})()}
+
       <table style={{width:"100%",borderCollapse:"collapse"}}>
         <thead><tr>{["Asset","Country","Type","GLA","BV €m","FV €m","Occ%","WALB","Tenants",""].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
-        <tbody>{assets.map(a=><tr key={a.id} onMouseEnter={e=>e.currentTarget.style.background=B.offWhite} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-          <td style={{...td,maxWidth:150}}><EC value={a.name} onChange={v=>ua(a.id,"name",v)}/></td>
-          <td style={td}><EC value={a.country} onChange={v=>ua(a.id,"country",v)}/></td>
-          <td style={td}><EC value={a.type} onChange={v=>ua(a.id,"type",v)}/></td>
-          <td style={td}><EC value={a.area} onChange={v=>ua(a.id,"area",v)} type="number" align="right"/></td>
-          <td style={td}><EC value={a.bookValue} onChange={v=>ua(a.id,"bookValue",v)} type="number" align="right" prefix="€"/></td>
-          <td style={td}><EC value={a.fairValue} onChange={v=>ua(a.id,"fairValue",v)} type="number" align="right" prefix="€"/></td>
-          <td style={td}>
-            <div style={{display:"flex",alignItems:"center",gap:4}}>
-              <EC value={a.occupancy} onChange={v=>ua(a.id,"occupancy",v)} type="number" align="right"/>
-              <div style={{width:26,height:3,background:B.border,borderRadius:2}}>
-                <div style={{height:"100%",borderRadius:2,width:`${Math.min(a.occupancy,100)}%`,background:a.occupancy>=95?B.success:a.occupancy>=80?"#E67E22":B.danger}}/>
-              </div>
-            </div>
-          </td>
-          <td style={td}>
-            <div style={{display:"flex",alignItems:"center",gap:4}}>
-              <EC value={a.walb} onChange={v=>ua(a.id,"walb",v)} type="number" align="right"/>
-              {a.walb<3&&<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`}}>SHORT</span>}
-            </div>
-          </td>
-          <td style={td}><EC value={a.tenants} onChange={v=>ua(a.id,"tenants",v)}/></td>
-          <td style={{...td,width:24}}>
-            <button onClick={()=>remA(a.id)} style={{background:"none",border:"none",color:B.border,cursor:"pointer",fontSize:13,padding:2}}
-              onMouseEnter={e=>e.currentTarget.style.color=B.danger} onMouseLeave={e=>e.currentTarget.style.color=B.border}>×</button>
-          </td>
-        </tr>)}</tbody>
+        <tbody>{assets.map(a=>{
+          const flags=aiFlags[a.id]||{};
+          const hasFlags=Object.keys(flags).length>0;
+          return <>
+            <tr key={a.id} onMouseEnter={e=>e.currentTarget.style.background=B.offWhite} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <td style={{...td,maxWidth:150}}>
+                <EC value={a.name} onChange={v=>ua(a.id,"name",v)}/>
+                {flags.name&&<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`,marginLeft:3}}>?</span>}
+              </td>
+              <td style={td}>
+                <EC value={a.country} onChange={v=>ua(a.id,"country",v)}/>
+                {flags.country&&<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`,marginLeft:3}}>?</span>}
+              </td>
+              <td style={td}>
+                <EC value={a.type} onChange={v=>ua(a.id,"type",v)}/>
+                {flags.type&&<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`,marginLeft:3}}>?</span>}
+              </td>
+              <td style={td}>
+                <div style={{display:"flex",alignItems:"center",gap:3}}>
+                  <EC value={a.area} onChange={v=>ua(a.id,"area",v)} type="number" align="right"/>
+                  {flags.area&&<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`}}>?</span>}
+                </div>
+              </td>
+              <td style={td}>
+                <div style={{display:"flex",alignItems:"center",gap:3}}>
+                  <EC value={a.bookValue} onChange={v=>ua(a.id,"bookValue",v)} type="number" align="right" prefix="€"/>
+                  {flags.bookValue&&<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`}}>?</span>}
+                </div>
+              </td>
+              <td style={td}>
+                <div style={{display:"flex",alignItems:"center",gap:3}}>
+                  <EC value={a.fairValue} onChange={v=>ua(a.id,"fairValue",v)} type="number" align="right" prefix="€"/>
+                  {flags.fairValue&&<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`}}>?</span>}
+                </div>
+              </td>
+              <td style={td}>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <EC value={a.occupancy} onChange={v=>ua(a.id,"occupancy",v)} type="number" align="right"/>
+                  {flags.occupancy
+                    ?<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`}}>?</span>
+                    :<div style={{width:26,height:3,background:B.border,borderRadius:2}}>
+                      <div style={{height:"100%",borderRadius:2,width:`${Math.min(a.occupancy,100)}%`,background:a.occupancy>=95?B.success:a.occupancy>=80?"#E67E22":B.danger}}/>
+                    </div>}
+                </div>
+              </td>
+              <td style={td}>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <EC value={a.walb} onChange={v=>ua(a.id,"walb",v)} type="number" align="right"/>
+                  {flags.walb
+                    ?<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`}}>?</span>
+                    :a.walb<3&&<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`}}>SHORT</span>}
+                </div>
+              </td>
+              <td style={td}>
+                <EC value={a.tenants} onChange={v=>ua(a.id,"tenants",v)}/>
+                {flags.tenants&&<span style={{fontSize:9,background:B.warningBg,color:B.warning,padding:"1px 4px",borderRadius:3,fontWeight:700,border:`0.5px solid ${B.warningBorder}`,marginLeft:3}}>?</span>}
+              </td>
+              <td style={{...td,width:90,whiteSpace:"nowrap"}}>
+                <div style={{display:"flex",alignItems:"center",gap:SP.xs}}>
+                  {/* Upload CSV button */}
+                  <button
+                    onClick={()=>{setCsvOpen(csvOpen===a.id?null:a.id);setAiOpen(null);}}
+                    title="Upload CSV"
+                    style={{padding:"3px 8px",fontSize:10,fontFamily:FF,fontWeight:600,borderRadius:5,cursor:"pointer",whiteSpace:"nowrap",
+                      border:`0.5px solid ${csvOpen===a.id?B.navy:B.border}`,
+                      background:csvOpen===a.id?B.navy:"transparent",
+                      color:csvOpen===a.id?B.white:B.textSecondary,transition:"all 0.1s"}}
+                    onMouseEnter={e=>{if(csvOpen!==a.id){e.currentTarget.style.borderColor=B.navy;e.currentTarget.style.color=B.navy;}}}
+                    onMouseLeave={e=>{if(csvOpen!==a.id){e.currentTarget.style.borderColor=B.border;e.currentTarget.style.color=B.textSecondary;}}}
+                  >↑ CSV</button>
+                  {/* AI Upload button */}
+                  <button
+                    onClick={()=>{setAiOpen(a.id);setCsvOpen(null);}}
+                    title="AI Upload — Claude maps fields automatically"
+                    style={{padding:"3px 8px",fontSize:10,fontFamily:FF,fontWeight:700,borderRadius:5,cursor:"pointer",whiteSpace:"nowrap",
+                      border:`0.5px solid ${B.terracotta}`,background:`${B.terracotta}12`,color:B.terracotta,transition:"all 0.1s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background=B.terracotta;e.currentTarget.style.color=B.white;}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=`${B.terracotta}12`;e.currentTarget.style.color=B.terracotta;}}
+                  >✦ AI</button>
+                  {/* Delete */}
+                  <button onClick={()=>remA(a.id)} style={{background:"none",border:"none",color:B.border,cursor:"pointer",fontSize:13,padding:2}}
+                    onMouseEnter={e=>e.currentTarget.style.color=B.danger} onMouseLeave={e=>e.currentTarget.style.color=B.border}>×</button>
+                </div>
+              </td>
+            </tr>
+            {/* CSV Upload sub-row */}
+            {csvOpen===a.id&&<tr key={`csv-${a.id}`}>
+              <td colSpan={10} style={{padding:`${SP.sm}px ${SP.md}px`,borderBottom:`0.5px solid ${B.border}`}}>
+                <CsvUploadPanel asset={a} onApply={data=>applyUpload(a.id,data)} onClose={()=>setCsvOpen(null)}/>
+              </td>
+            </tr>}
+          </>;
+        })}</tbody>
         <tfoot>
           <tr style={{background:B.offWhite}}>
             <td colSpan={4} style={{...td,fontWeight:700,fontSize:12,fontFamily:FF,color:B.textPrimary}}>Total</td>
