@@ -1903,8 +1903,124 @@ function Step5({cfg,assets,debt,notes,mkt,structure,user,resolutions,flags,audit
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP ROOT
 // ═══════════════════════════════════════════════════════════════════════════════
+// LANDING — step 0
+// ═══════════════════════════════════════════════════════════════════════════════
+const LANDING_STEPS=[
+  {num:"01",label:"Fund Config",    desc:"Fund identity, strategy, audience, tone and branding.",                                                          ai:false},
+  {num:"02",label:"Data Intake",    desc:"Assets, debt, market context and financials. Upload CSV or PDF — Claude maps fields automatically.",             ai:true},
+  {num:"03",label:"Report Structure",desc:"Section editor with presets, drag-to-reorder and named variants.",                                             ai:false},
+  {num:"04",label:"Review & Flags", desc:"Analyst flags surface data gaps, covenant proximity and directional logic issues.",                              ai:false},
+  {num:"05",label:"Generate & Export",desc:"Claude drafts each section. Confidence scores, approval workflow and audit log.",                             ai:true},
+];
+const LANDING_FEATURES=[
+  {label:"Multi-file AI Upload",  desc:"Drop a valuation report, loan schedule and broker note — assign each to a data destination. Claude maps fields and flags gaps inline."},
+  {label:"Live NAV bridge",       desc:"Closing NAV computed in real time from asset fair values, debt table and manual inputs. Preview updates as you type."},
+  {label:"Analyst flag engine",   desc:"Automatic flags for short WALB, covenant proximity, sub-90% occupancy, unhedged debt and directional logic conflicts."},
+  {label:"Approval workflow",     desc:"Session identity, per-flag resolution logging and a timestamped audit trail on every generated report."},
+];
+const LANDING_AI_BULLETS=["Section narrative drafting","Confidence scoring per section","Multi-file field mapping","Inline data gap flagging"];
+
+function Landing({onStart}){
+  const [hov,setHov]=useState(false);
+  return(
+    <div style={{minHeight:"100vh",background:B.white,fontFamily:FF,display:"flex",flexDirection:"column"}}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');*{box-sizing:border-box;margin:0;padding:0;}`}</style>
+
+      {/* Nav */}
+      <header style={{background:B.navy,height:56,padding:"0 48px",display:"flex",alignItems:"center",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <img src="https://res.cloudinary.com/dsgfts9gp/image/upload/Gemini_Generated_Image_uao02uao02uao02u-remove-bg-io_mb5sys.png" alt="" style={{height:34,width:34,objectFit:"contain"}}/>
+          <div style={{width:"0.5px",height:16,background:"rgba(255,255,255,0.15)"}}/>
+          <span style={{fontSize:13,fontWeight:600,color:B.white,letterSpacing:"0.01em"}}>LP Report Generator</span>
+          <div style={{width:4,height:4,borderRadius:"50%",background:B.terracotta}}/>
+          <span style={{fontSize:9,fontWeight:600,letterSpacing:"0.09em",color:"rgba(255,255,255,0.3)",textTransform:"uppercase"}}>Fund Operations Tool</span>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <div style={{background:B.navy,padding:"100px 48px 110px",display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center"}}>
+        <div style={{fontSize:11,fontWeight:600,letterSpacing:"0.1em",color:"rgba(255,255,255,0.35)",textTransform:"uppercase",marginBottom:28}}>Fund Operations Tool</div>
+        <h1 style={{fontSize:40,fontWeight:600,color:B.white,margin:"0 0 20px",letterSpacing:"-0.025em",lineHeight:1.15,maxWidth:600,fontFamily:FF}}>
+          Quarterly LP reporting,<br/>built for real estate funds.
+        </h1>
+        <p style={{fontSize:15,color:"rgba(255,255,255,0.5)",margin:"0 0 48px",maxWidth:460,lineHeight:1.7,fontWeight:400}}>
+          Structure, review and generate institutional-quality LP reports — with pre-generation data validation, a section editor, AI narrative drafting, and a full approval workflow.
+        </p>
+        <button
+          onClick={onStart}
+          onMouseEnter={()=>setHov(true)}
+          onMouseLeave={()=>setHov(false)}
+          style={{padding:"12px 28px",background:hov?"#A85520":"#C8692A",color:B.white,border:"none",borderRadius:8,fontSize:13,fontWeight:500,cursor:"pointer",letterSpacing:"0.01em",transition:"background 0.15s",fontFamily:FF}}
+        >Get Started →</button>
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.2)",marginTop:14}}>Pre-populated with a sample European logistics fund</div>
+      </div>
+
+      {/* Steps */}
+      <div style={{background:B.white,padding:"80px 48px"}}>
+        <div style={{maxWidth:900,margin:"0 auto"}}>
+          <div style={{fontSize:10,fontWeight:600,letterSpacing:"0.1em",color:"#aaaaaa",textTransform:"uppercase",marginBottom:48,textAlign:"center"}}>Five steps</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:"0 32px"}}>
+            {LANDING_STEPS.map(s=>(
+              <div key={s.num}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+                  <span style={{fontSize:11,fontWeight:500,color:B.terracotta,fontFamily:"monospace"}}>{s.num}</span>
+                  {s.ai&&<span style={{fontSize:9,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:"#7A3A12",background:"#FBF0E9",padding:"2px 7px",borderRadius:20}}>AI</span>}
+                </div>
+                <div style={{borderTop:`0.5px solid ${B.border}`,paddingTop:20}}>
+                  <div style={{fontSize:14,fontWeight:500,color:B.navy,marginBottom:10}}>{s.label}</div>
+                  <div style={{fontSize:12,color:"#888888",lineHeight:1.65}}>{s.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Features */}
+      <div style={{background:B.offWhite,padding:"64px 48px"}}>
+        <div style={{maxWidth:900,margin:"0 auto"}}>
+          <div style={{fontSize:10,fontWeight:600,letterSpacing:"0.1em",color:"#aaaaaa",textTransform:"uppercase",marginBottom:40,textAlign:"center"}}>What's inside</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"32px 64px"}}>
+            {LANDING_FEATURES.map(f=>(
+              <div key={f.label} style={{borderTop:`0.5px solid ${B.border}`,paddingTop:20}}>
+                <div style={{fontSize:13,fontWeight:500,color:B.navy,marginBottom:6}}>{f.label}</div>
+                <div style={{fontSize:13,color:"#888888",lineHeight:1.6}}>{f.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* AI strip */}
+      <div style={{background:B.navy,padding:48}}>
+        <div style={{maxWidth:900,margin:"0 auto",display:"flex",alignItems:"flex-start",gap:80}}>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,fontWeight:600,letterSpacing:"0.1em",color:B.terracotta,textTransform:"uppercase",marginBottom:16}}>AI features</div>
+            <div style={{fontSize:15,fontWeight:500,color:B.white,marginBottom:12,lineHeight:1.4}}>Claude acts as a senior analyst across the full reporting workflow</div>
+            <div style={{fontSize:13,color:"rgba(255,255,255,0.45)",lineHeight:1.7}}>From field mapping on upload to section-level narrative drafting — Claude works within the data you've already reviewed and flagged. Each generated section carries a confidence score. No data is transmitted externally in demo mode.</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:38,flexShrink:0}}>
+            {LANDING_AI_BULLETS.map(b=>(
+              <div key={b} style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:3,height:3,borderRadius:"50%",background:B.terracotta,flexShrink:0}}/>
+                <span style={{fontSize:12,color:"rgba(255,255,255,0.5)"}}>{b}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{background:B.white,padding:"24px 48px",borderTop:`0.5px solid ${B.border}`}}>
+        <div style={{fontSize:11,color:"#cccccc",textAlign:"center"}}>LP Report Generator · Fund Operations Tool · Built by Tomaso Portunato</div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 export default function App(){
-  const [step,setStep]=useState(1);
+  const [step,setStep]=useState(0);
   const [user,setUser]=useState(null);
   const [log,setLog]=useState([]);
   const [resolutions,setResolutions]=useState({});
@@ -1933,6 +2049,11 @@ export default function App(){
       ::placeholder { color: #9097A3; }
     `}</style>
 
+    {/* Landing — step 0 */}
+    {step===0&&<Landing onStart={()=>setStep(1)}/>}
+
+    {/* App — steps 1–5 */}
+    {step>0&&<>
     {/* Session gate */}
     {!user&&step>=4&&<SessionGate onConfirm={confirmUser}/>}
 
@@ -1976,5 +2097,6 @@ export default function App(){
         <span style={{fontSize:11,color:B.textMuted,fontFamily:FF}}>v0.5</span>
       </div>
     </div>
+    </>}
   </div>;
 }
