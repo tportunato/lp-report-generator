@@ -401,7 +401,15 @@ function Step1({cfg,setCfg,onNext}){
         ))}
       </div>
       {cfg.reportMode!=="new"
-        ?<DZ file={cfg.priorReport} onFile={u("priorReport")} label="Upload prior quarterly report" opt/>
+        ?<div>
+          <DZ file={cfg.priorReport} onFile={u("priorReport")} label="Upload prior quarterly report" opt/>
+          <div style={{marginTop:SP.sm,display:"flex",gap:SP.sm,alignItems:"flex-start",padding:"8px 12px",background:B.warningBg,border:`0.5px solid ${B.warningBorder}`,borderRadius:6}}>
+            <span style={{fontSize:13,flexShrink:0,marginTop:1}}>⚠</span>
+            <div style={{fontSize:11,color:B.warning,fontFamily:FF,lineHeight:1.6}}>
+              <span style={{fontWeight:700}}>Sensitive document.</span> Prior reports may contain confidential investor, financial or portfolio data. Do not upload without confirming this is permitted under your fund's data handling policy. Seek manager approval if applicable.
+            </div>
+          </div>
+        </div>
         :<div style={{background:B.warningBg,border:`0.5px solid ${B.warningBorder}`,borderRadius:6,padding:"9px 12px",fontSize:12,color:B.warning,fontFamily:FF}}>No prior report — AI relies on tone and branding settings.</div>}
     </Card>
     <div style={{display:"flex",justifyContent:"flex-end"}}>
