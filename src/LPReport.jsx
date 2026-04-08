@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback } from "react";
 
 // ─── BRAND TOKENS ─────────────────────────────────────────────────────────────
 const B = {
@@ -1922,6 +1922,10 @@ const LANDING_AI_BULLETS=["Section narrative drafting","Confidence scoring per s
 
 function Landing({onStart}){
   const [hov,setHov]=useState(false);
+  const mf={width:"100%",border:`0.5px solid ${B.border}`,borderRadius:6,padding:"8px 12px",fontSize:11,color:B.navy,background:B.white,fontFamily:FF};
+  const mfSel={...mf,backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%235A6070'/%3E%3C/svg%3E")`,backgroundRepeat:"no-repeat",backgroundPosition:"right 10px center",paddingRight:28};
+  const ml={fontSize:8,fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:B.textSecondary,marginBottom:4,fontFamily:FF};
+  const chip=(active)=>({padding:"6px 8px",borderRadius:5,fontSize:9,fontWeight:active?700:400,background:active?B.navy:"transparent",color:active?B.white:B.textSecondary,border:`0.5px solid ${active?B.navy:B.border}`,textAlign:"center"});
   return(
     <div style={{minHeight:"100vh",background:B.white,fontFamily:FF,display:"flex",flexDirection:"column"}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');*{box-sizing:border-box;margin:0;padding:0;}`}</style>
@@ -1938,21 +1942,126 @@ function Landing({onStart}){
       </header>
 
       {/* Hero */}
-      <div style={{background:B.navy,padding:"100px 48px 110px",display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center"}}>
-        <div style={{fontSize:11,fontWeight:600,letterSpacing:"0.1em",color:"rgba(255,255,255,0.35)",textTransform:"uppercase",marginBottom:28}}>Fund Operations Tool</div>
-        <h1 style={{fontSize:40,fontWeight:600,color:B.white,margin:"0 0 20px",letterSpacing:"-0.025em",lineHeight:1.15,maxWidth:600,fontFamily:FF}}>
+      <div style={{background:B.navy,padding:"72px 48px 0",display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center"}}>
+        <div style={{fontSize:11,fontWeight:600,letterSpacing:"0.1em",color:"rgba(255,255,255,0.35)",textTransform:"uppercase",marginBottom:24}}>Fund Operations Tool</div>
+        <h1 style={{fontSize:40,fontWeight:600,color:B.white,margin:"0 0 18px",letterSpacing:"-0.025em",lineHeight:1.15,maxWidth:600,fontFamily:FF}}>
           Quarterly LP reporting,<br/>built for real estate funds.
         </h1>
-        <p style={{fontSize:15,color:"rgba(255,255,255,0.5)",margin:"0 0 48px",maxWidth:460,lineHeight:1.7,fontWeight:400}}>
-          Structure, review and generate institutional-quality LP reports — with pre-generation data validation, a section editor, AI narrative drafting, and a full approval workflow.
+        <p style={{fontSize:15,color:"rgba(255,255,255,0.5)",margin:"0 0 24px",maxWidth:500,lineHeight:1.65,fontWeight:400}}>
+          From data intake to final draft — validate assets, resolve flags, and generate section-level LP narratives with a full approval workflow.
         </p>
-        <button
-          onClick={onStart}
-          onMouseEnter={()=>setHov(true)}
-          onMouseLeave={()=>setHov(false)}
-          style={{padding:"12px 28px",background:hov?"#A85520":"#C8692A",color:B.white,border:"none",borderRadius:8,fontSize:13,fontWeight:500,cursor:"pointer",letterSpacing:"0.01em",transition:"background 0.15s",fontFamily:FF}}
+
+        {/* AI feature pills */}
+        <div style={{display:"flex",flexWrap:"wrap",justifyContent:"center",gap:8,marginBottom:32}}>
+          {["Multi-file AI Upload","Section narrative drafting","Analyst flag engine","Confidence scoring"].map(p=>(
+            <span key={p} style={{fontSize:11,color:"rgba(255,255,255,0.6)",background:"rgba(255,255,255,0.08)",border:"0.5px solid rgba(255,255,255,0.15)",padding:"5px 12px",borderRadius:20}}>✦ {p}</span>
+          ))}
+        </div>
+
+        <button onClick={onStart} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+          style={{padding:"12px 28px",background:hov?"#A85520":"#C8692A",color:B.white,border:"none",borderRadius:8,fontSize:13,fontWeight:500,cursor:"pointer",letterSpacing:"0.01em",transition:"background 0.15s",fontFamily:FF,marginBottom:10}}
         >Get Started →</button>
-        <div style={{fontSize:11,color:"rgba(255,255,255,0.2)",marginTop:14}}>Pre-populated with a sample European logistics fund</div>
+        <div style={{fontSize:11,color:"rgba(255,255,255,0.2)",marginBottom:48}}>Pre-populated with a sample European logistics fund</div>
+
+        {/* Browser mock frame */}
+        <div style={{width:"100%",maxWidth:960,borderRadius:"10px 10px 0 0",overflow:"hidden",boxShadow:"0 -4px 40px rgba(0,0,0,0.35)"}}>
+          {/* Chrome bar */}
+          <div style={{background:"#0c1e35",padding:"10px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
+              <div style={{width:11,height:11,borderRadius:"50%",background:"#FF5F57"}}/>
+              <div style={{width:11,height:11,borderRadius:"50%",background:"#FEBC2E"}}/>
+              <div style={{width:11,height:11,borderRadius:"50%",background:"#28C840"}}/>
+            </div>
+            <div style={{flex:1,background:"rgba(255,255,255,0.07)",borderRadius:5,padding:"5px 12px",fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:FF,textAlign:"center"}}>lp-report-generator.vercel.app</div>
+            <div style={{width:52,flexShrink:0}}/>
+          </div>
+
+          {/* Viewport — fixed height, overflow hidden for hard crop */}
+          <div style={{height:420,overflow:"hidden",background:B.offWhite}}>
+            {/* Tool navbar */}
+            <div style={{background:B.navy,height:44,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <img src="https://res.cloudinary.com/dsgfts9gp/image/upload/Gemini_Generated_Image_uao02uao02uao02u-remove-bg-io_mb5sys.png" alt="" style={{height:28,width:28,objectFit:"contain"}}/>
+                <div style={{width:2,height:14,background:B.terracotta,borderRadius:2}}/>
+                <span style={{fontSize:11,fontWeight:700,color:B.white,letterSpacing:"0.04em"}}>LP Report Generator</span>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{width:5,height:5,borderRadius:"50%",background:B.terracotta}}/>
+                <span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>v0.5</span>
+              </div>
+            </div>
+
+            {/* Step bar */}
+            <div style={{background:B.offWhite,padding:"10px 24px",display:"flex",alignItems:"center"}}>
+              {[["1","Fund Config",true],["2","Data Intake",false],["3","Report Structure",false],["4","Review & Flags",false],["5","Generate & Export",false]].map(([n,l,active],i)=>(
+                <React.Fragment key={n}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                    <div style={{width:22,height:22,borderRadius:"50%",background:active?B.terracotta:"transparent",border:`2px solid ${active?B.terracotta:B.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:active?B.white:B.textMuted}}>{n}</div>
+                    <span style={{fontSize:10,fontWeight:active?700:400,color:active?B.terracotta:B.textMuted,whiteSpace:"nowrap"}}>{l}</span>
+                  </div>
+                  {i<4&&<div style={{flex:1,height:"0.5px",background:B.border,margin:"0 10px"}}/>}
+                </React.Fragment>
+              ))}
+            </div>
+
+            {/* Content */}
+            <div style={{padding:"0 16px"}}>
+              <div style={{background:B.white,borderRadius:"10px 10px 0 0",border:`0.5px solid ${B.border}`,borderBottom:"none"}}>
+                <div style={{padding:"16px 20px",borderBottom:`0.5px solid ${B.border}`}}>
+                  <div style={{fontSize:15,fontWeight:700,color:B.navy,marginBottom:3}}>Fund Configuration</div>
+                  <div style={{fontSize:11,color:B.textMuted}}>Configure fund parameters, reporting context and branding.</div>
+                </div>
+                {/* Fund Identity card */}
+                <div style={{margin:"14px 20px",border:`0.5px solid ${B.border}`,borderRadius:10,overflow:"hidden"}}>
+                  <div style={{background:B.offWhite,padding:"9px 14px",borderBottom:`0.5px solid ${B.border}`}}>
+                    <div style={{fontSize:11,fontWeight:700,color:B.navy}}>Fund Identity</div>
+                  </div>
+                  <div style={{padding:14}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px",marginBottom:10}}>
+                      <div><div style={ml}>Fund Name <span style={{color:B.danger}}>*</span></div><div style={mf}>Meridian European Logistics Fund II</div></div>
+                      <div><div style={ml}>Reporting Period <span style={{color:B.danger}}>*</span></div><div style={mf}>Q3 2024</div></div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px",marginBottom:10}}>
+                      <div><div style={ml}>Strategy <span style={{color:B.danger}}>*</span></div><div style={mfSel}>Value-Add</div></div>
+                      <div><div style={ml}>Fund Stage <span style={{color:B.danger}}>*</span></div><div style={mfSel}>Investment Period</div></div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px"}}>
+                      <div><div style={ml}>Base Currency <span style={{color:B.danger}}>*</span></div><div style={mfSel}>EUR</div></div>
+                      <div><div style={ml}>Reporting Date</div><div style={mf}>09/30/2024</div></div>
+                    </div>
+                  </div>
+                </div>
+                {/* Audience & Tone — partially visible at crop */}
+                <div style={{margin:"0 20px 14px",border:`0.5px solid ${B.border}`,borderRadius:10,overflow:"hidden"}}>
+                  <div style={{background:B.offWhite,padding:"9px 14px",borderBottom:`0.5px solid ${B.border}`}}>
+                    <div style={{fontSize:11,fontWeight:700,color:B.navy}}>Audience & Tone</div>
+                  </div>
+                  <div style={{padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                    <div>
+                      <div style={{...ml,marginBottom:7}}>Target Audience <span style={{color:B.danger}}>*</span></div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+                        <div style={chip(true)}>Institutional LP</div>
+                        <div style={chip(false)}>Family Office</div>
+                        <div style={chip(false)}>HNW / Private</div>
+                        <div style={chip(false)}>Mixed LP Base</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{...ml,marginBottom:7}}>Tone <span style={{color:B.danger}}>*</span></div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+                        <div style={chip(true)}>Formal & Precise</div>
+                        <div style={chip(false)}>Narrative</div>
+                        <div style={chip(false)}>Concise Factual</div>
+                        <div style={chip(false)}>Cautious</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* no bottom border — bleeds into white steps section */}
+        </div>
       </div>
 
       {/* Steps */}
@@ -1985,25 +2094,6 @@ function Landing({onStart}){
               <div key={f.label} style={{borderTop:`0.5px solid ${B.border}`,paddingTop:20}}>
                 <div style={{fontSize:13,fontWeight:500,color:B.navy,marginBottom:6}}>{f.label}</div>
                 <div style={{fontSize:13,color:"#888888",lineHeight:1.6}}>{f.desc}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* AI strip */}
-      <div style={{background:B.navy,padding:48}}>
-        <div style={{maxWidth:900,margin:"0 auto",display:"flex",alignItems:"flex-start",gap:80}}>
-          <div style={{flex:1}}>
-            <div style={{fontSize:10,fontWeight:600,letterSpacing:"0.1em",color:B.terracotta,textTransform:"uppercase",marginBottom:16}}>AI features</div>
-            <div style={{fontSize:15,fontWeight:500,color:B.white,marginBottom:12,lineHeight:1.4}}>Claude acts as a senior analyst across the full reporting workflow</div>
-            <div style={{fontSize:13,color:"rgba(255,255,255,0.45)",lineHeight:1.7}}>From field mapping on upload to section-level narrative drafting — Claude works within the data you've already reviewed and flagged. Each generated section carries a confidence score. No data is transmitted externally in demo mode.</div>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:12,paddingTop:38,flexShrink:0}}>
-            {LANDING_AI_BULLETS.map(b=>(
-              <div key={b} style={{display:"flex",alignItems:"center",gap:10}}>
-                <div style={{width:3,height:3,borderRadius:"50%",background:B.terracotta,flexShrink:0}}/>
-                <span style={{fontSize:12,color:"rgba(255,255,255,0.5)"}}>{b}</span>
               </div>
             ))}
           </div>
