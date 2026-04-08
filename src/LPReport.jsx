@@ -1963,36 +1963,37 @@ function Landing({onStart}){
         >Get Started →</button>
         <div style={{fontSize:11,color:"rgba(255,255,255,0.2)",marginBottom:48}}>Pre-populated with a sample European logistics fund</div>
 
-        {/* Browser mock frame */}
-        <div style={{width:"100%",maxWidth:960,borderRadius:"10px 10px 0 0",overflow:"hidden",boxShadow:"0 -4px 40px rgba(0,0,0,0.35)"}}>
+        {/* Browser mock frame — Asset Manager pattern: overflow:hidden on wrapper, content crops naturally */}
+        <div style={{width:"100%",maxWidth:960,borderRadius:"12px 12px 0 0",border:"0.5px solid rgba(255,255,255,0.12)",background:"#1a3150",overflow:"hidden"}}>
           {/* Chrome bar */}
-          <div style={{background:"#0c1e35",padding:"10px 14px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+          <div style={{background:"#0c1e35",padding:"10px 16px",display:"flex",alignItems:"center",gap:6,borderBottom:"0.5px solid rgba(255,255,255,0.08)"}}>
             <div style={{display:"flex",gap:6,flexShrink:0}}>
-              <div style={{width:11,height:11,borderRadius:"50%",background:"#FF5F57"}}/>
-              <div style={{width:11,height:11,borderRadius:"50%",background:"#FEBC2E"}}/>
-              <div style={{width:11,height:11,borderRadius:"50%",background:"#28C840"}}/>
+              <div style={{width:11,height:11,borderRadius:"50%",background:"#FF5F57",opacity:0.8}}/>
+              <div style={{width:11,height:11,borderRadius:"50%",background:"#FEBC2E",opacity:0.8}}/>
+              <div style={{width:11,height:11,borderRadius:"50%",background:"#28C840",opacity:0.8}}/>
             </div>
             <div style={{flex:1,background:"rgba(255,255,255,0.07)",borderRadius:5,padding:"5px 12px",fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:FF,textAlign:"center"}}>lp-report-generator.vercel.app</div>
-            <div style={{width:52,flexShrink:0}}/>
+            <div style={{width:46,flexShrink:0}}/>
           </div>
 
-          {/* Viewport — fixed height, overflow hidden for hard crop */}
-          <div style={{height:420,overflow:"hidden",background:B.offWhite}}>
-            {/* Tool navbar */}
-            <div style={{background:B.navy,height:44,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <img src="https://res.cloudinary.com/dsgfts9gp/image/upload/Gemini_Generated_Image_uao02uao02uao02u-remove-bg-io_mb5sys.png" alt="" style={{height:28,width:28,objectFit:"contain"}}/>
-                <div style={{width:2,height:14,background:B.terracotta,borderRadius:2}}/>
-                <span style={{fontSize:11,fontWeight:700,color:B.white,letterSpacing:"0.04em"}}>LP Report Generator</span>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <div style={{width:5,height:5,borderRadius:"50%",background:B.terracotta}}/>
-                <span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>v0.5</span>
-              </div>
+          {/* Tool navbar */}
+          <div style={{background:B.navy,padding:"0 20px",height:44,display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"0.5px solid rgba(255,255,255,0.08)"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <img src="https://res.cloudinary.com/dsgfts9gp/image/upload/Gemini_Generated_Image_uao02uao02uao02u-remove-bg-io_mb5sys.png" alt="" style={{height:28,width:28,objectFit:"contain"}}/>
+              <div style={{width:2,height:14,background:B.terracotta,borderRadius:2}}/>
+              <span style={{fontSize:11,fontWeight:700,color:B.white,letterSpacing:"0.04em"}}>LP Report Generator</span>
             </div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:5,height:5,borderRadius:"50%",background:B.terracotta}}/>
+              <span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>v0.5</span>
+            </div>
+          </div>
+
+          {/* App content — no fixed height, fills naturally and gets cropped by wrapper overflow:hidden */}
+          <div style={{background:B.offWhite,padding:20}}>
 
             {/* Step bar */}
-            <div style={{background:B.offWhite,padding:"10px 24px",display:"flex",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",marginBottom:16}}>
               {[["1","Fund Config",true],["2","Data Intake",false],["3","Report Structure",false],["4","Review & Flags",false],["5","Generate & Export",false]].map(([n,l,active],i)=>(
                 <React.Fragment key={n}>
                   <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
@@ -2004,63 +2005,59 @@ function Landing({onStart}){
               ))}
             </div>
 
-            {/* Content */}
-            <div style={{padding:"0 16px"}}>
-              <div style={{background:B.white,borderRadius:"10px 10px 0 0",border:`0.5px solid ${B.border}`,borderBottom:"none"}}>
-                <div style={{padding:"16px 20px",borderBottom:`0.5px solid ${B.border}`}}>
-                  <div style={{fontSize:15,fontWeight:700,color:B.navy,marginBottom:3}}>Fund Configuration</div>
-                  <div style={{fontSize:11,color:B.textMuted}}>Configure fund parameters, reporting context and branding.</div>
+            {/* Main content card */}
+            <div style={{background:B.white,borderRadius:10,border:`0.5px solid ${B.border}`,overflow:"hidden"}}>
+              <div style={{padding:"16px 20px",borderBottom:`0.5px solid ${B.border}`}}>
+                <div style={{fontSize:15,fontWeight:700,color:B.navy,marginBottom:3}}>Fund Configuration</div>
+                <div style={{fontSize:11,color:B.textMuted}}>Configure fund parameters, reporting context and branding.</div>
+              </div>
+              {/* Fund Identity */}
+              <div style={{margin:"14px 20px",border:`0.5px solid ${B.border}`,borderRadius:10,overflow:"hidden"}}>
+                <div style={{background:B.offWhite,padding:"9px 14px",borderBottom:`0.5px solid ${B.border}`}}>
+                  <div style={{fontSize:11,fontWeight:700,color:B.navy}}>Fund Identity</div>
                 </div>
-                {/* Fund Identity card */}
-                <div style={{margin:"14px 20px",border:`0.5px solid ${B.border}`,borderRadius:10,overflow:"hidden"}}>
-                  <div style={{background:B.offWhite,padding:"9px 14px",borderBottom:`0.5px solid ${B.border}`}}>
-                    <div style={{fontSize:11,fontWeight:700,color:B.navy}}>Fund Identity</div>
+                <div style={{padding:14}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px",marginBottom:10}}>
+                    <div><div style={ml}>Fund Name <span style={{color:B.danger}}>*</span></div><div style={mf}>Meridian European Logistics Fund II</div></div>
+                    <div><div style={ml}>Reporting Period <span style={{color:B.danger}}>*</span></div><div style={mf}>Q3 2024</div></div>
                   </div>
-                  <div style={{padding:14}}>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px",marginBottom:10}}>
-                      <div><div style={ml}>Fund Name <span style={{color:B.danger}}>*</span></div><div style={mf}>Meridian European Logistics Fund II</div></div>
-                      <div><div style={ml}>Reporting Period <span style={{color:B.danger}}>*</span></div><div style={mf}>Q3 2024</div></div>
-                    </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px",marginBottom:10}}>
-                      <div><div style={ml}>Strategy <span style={{color:B.danger}}>*</span></div><div style={mfSel}>Value-Add</div></div>
-                      <div><div style={ml}>Fund Stage <span style={{color:B.danger}}>*</span></div><div style={mfSel}>Investment Period</div></div>
-                    </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px"}}>
-                      <div><div style={ml}>Base Currency <span style={{color:B.danger}}>*</span></div><div style={mfSel}>EUR</div></div>
-                      <div><div style={ml}>Reporting Date</div><div style={mf}>09/30/2024</div></div>
-                    </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px",marginBottom:10}}>
+                    <div><div style={ml}>Strategy <span style={{color:B.danger}}>*</span></div><div style={mfSel}>Value-Add</div></div>
+                    <div><div style={ml}>Fund Stage <span style={{color:B.danger}}>*</span></div><div style={mfSel}>Investment Period</div></div>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px 16px"}}>
+                    <div><div style={ml}>Base Currency <span style={{color:B.danger}}>*</span></div><div style={mfSel}>EUR</div></div>
+                    <div><div style={ml}>Reporting Date</div><div style={mf}>09/30/2024</div></div>
                   </div>
                 </div>
-                {/* Audience & Tone — partially visible at crop */}
-                <div style={{margin:"0 20px 14px",border:`0.5px solid ${B.border}`,borderRadius:10,overflow:"hidden"}}>
-                  <div style={{background:B.offWhite,padding:"9px 14px",borderBottom:`0.5px solid ${B.border}`}}>
-                    <div style={{fontSize:11,fontWeight:700,color:B.navy}}>Audience & Tone</div>
-                  </div>
-                  <div style={{padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-                    <div>
-                      <div style={{...ml,marginBottom:7}}>Target Audience <span style={{color:B.danger}}>*</span></div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
-                        <div style={chip(true)}>Institutional LP</div>
-                        <div style={chip(false)}>Family Office</div>
-                        <div style={chip(false)}>HNW / Private</div>
-                        <div style={chip(false)}>Mixed LP Base</div>
-                      </div>
+              </div>
+              {/* Audience & Tone — content continues below visible area */}
+              <div style={{margin:"0 20px 14px",border:`0.5px solid ${B.border}`,borderRadius:10,overflow:"hidden"}}>
+                <div style={{background:B.offWhite,padding:"9px 14px",borderBottom:`0.5px solid ${B.border}`}}>
+                  <div style={{fontSize:11,fontWeight:700,color:B.navy}}>Audience & Tone</div>
+                </div>
+                <div style={{padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+                  <div>
+                    <div style={{...ml,marginBottom:7}}>Target Audience <span style={{color:B.danger}}>*</span></div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+                      {[["Institutional LP",true],["Family Office",false],["HNW / Private",false],["Mixed LP Base",false]].map(([l,a])=>(
+                        <div key={l} style={chip(a)}>{l}</div>
+                      ))}
                     </div>
-                    <div>
-                      <div style={{...ml,marginBottom:7}}>Tone <span style={{color:B.danger}}>*</span></div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
-                        <div style={chip(true)}>Formal & Precise</div>
-                        <div style={chip(false)}>Narrative</div>
-                        <div style={chip(false)}>Concise Factual</div>
-                        <div style={chip(false)}>Cautious</div>
-                      </div>
+                  </div>
+                  <div>
+                    <div style={{...ml,marginBottom:7}}>Tone <span style={{color:B.danger}}>*</span></div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>
+                      {[["Formal & Precise",true],["Narrative",false],["Concise Factual",false],["Cautious",false]].map(([l,a])=>(
+                        <div key={l} style={chip(a)}>{l}</div>
+                      ))}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+
           </div>
-          {/* no bottom border — bleeds into white steps section */}
         </div>
       </div>
 
